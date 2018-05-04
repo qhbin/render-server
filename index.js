@@ -1,6 +1,4 @@
 const Koa = require('koa')
-const KoaStatic = require('koa-static')
-const router = require('koa-router')()
 const c2k = require('koa2-connect')
 const proxy = require('http-proxy-middleware')
 const session = require('koa-session')
@@ -8,43 +6,43 @@ const config = require('./config')
 
 const app = new Koa();
 
-app.keys = ['some secret hurr'];
+//session配置项
+app.keys = ['koa key'];
 const CONFIG = {
-	key: 'koa:sess', //cookie key (default is koa:sess)
-	maxAge: 86400000, // cookie的过期时间 maxAge in ms (default is 1 days)
-	overwrite: true, //是否可以overwrite    (默认default true)
-	httpOnly: true, //cookie是否只有服务器端可以访问 httpOnly or not (default true)
-	signed: true, //签名默认true
-	rolling: false, //在每次请求时强行设置cookie，这将重置cookie过期时间（默认：false）
-	renew: false, //(boolean) renew session when session is nearly expired,
+	key: 'koa:sess', 
+	maxAge: 86400000, 
+	overwrite: true,
+	httpOnly: true, 
+	signed: true, 
+	rolling: false, 
+	renew: false
 };
-
 app.use(session(CONFIG, app));
 
+
+//设置token
 app.use(async (ctx, next) => {
-	let {res, protocol, host, query } = ctx;
-	if (query.token) ctx.session.token = query.token;
+	let { query } = ctx;
+	if (query.host) ctx.session.host = query.host;
 	next()
-	ctx.session.token = 'ssss'
-	ctx.body='ssss'
 });
 
+//定义全局map存放接入的系统
 let map = new Map()
 
-let getProxy = (token, protocol, host) => c2k(proxy({
-	target: 'http://localhost:8080',
+//代理函数
+let getProxy = (target, protocol, host) => c2k(proxy({
+	target: config.BASE_PROXY,
 	changeOrigin: true,
 	router: function(req) {
-		debugger
-		let ss = token
-		return 'http://localhost:8080';
+		if(!!target){
+			return target;
+		}
+		return config.BASE_PROXY;
 	},
 	onProxyRes(proxyRes, req, res) {
-		debugger
-		let {
-			url
-		} = req
-		if (url.indexOf('?') > -1 && url.indexOf('token') > 0) {
+		let {url } = req 
+		if (url.indexOf('?') > -1 && url.indexOf('host') > 0) {
 			res.writeHead(302, {
 				'Location': `${protocol}://${host}`
 			})
@@ -53,15 +51,18 @@ let getProxy = (token, protocol, host) => c2k(proxy({
 	}
 }))
 
-/*app.use(async (ctx, next) => {
-	debugger
+//代理中间件
+app.use(async (ctx, next) => {
 	let {protocol, host } = ctx;
-	let {token } = ctx.session
-	if (!map.has(token)) {
-		map.set(token, getProxy(token, protocol, host))
+	let target = null;
+	if(!!ctx.session.host){
+		target = ctx.session.host
 	}
-	return map.get(token)(ctx, next)
-});*/
+	if (!map.has(target)) {
+		map.set(target, getProxy(target, protocol, host))
+	}
+	return map.get(target)(ctx, next)
+});
 
-app.listen(config.port)
+app.listen(config.PORT)
 console.log('render server started!')
