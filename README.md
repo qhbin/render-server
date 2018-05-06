@@ -4,6 +4,7 @@
 ## 用途
 
 ``` bash
-
+#dev
+npm/yarn install && npm/yarn run dev
 ```
 
